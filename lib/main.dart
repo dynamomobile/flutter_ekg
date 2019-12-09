@@ -1,111 +1,233 @@
+import 'dart:async';
+import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'EKG',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: EKGScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
+class EKGScreen extends StatefulWidget {
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _EKGScreenState createState() => _EKGScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _EKGScreenState extends State<EKGScreen> with TickerProviderStateMixin {
+  final ekgPainter = EKGPainter();
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  AnimationController _animationController;
+  Animation _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController =
+        AnimationController(duration: Duration(milliseconds: 1200), vsync: this);
+    _animation = Tween<double>(begin: 1, end: 0).animate(_animationController);
+    _animationController.repeat();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
+        body: FutureBuilder(
+      future: _loadImage(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          ekgPainter.image = snapshot.data;
+        }
+        return AnimatedBuilder(
+          animation: _animation,
+          child: _canvas(),
+          builder: (context, child) {
+            ekgPainter._offset = _animation.value;
+            return _canvas();
+          },
+        );
+      },
+    ));
+  }
+
+  Future<ui.Image> _loadImage() async {
+    final ByteData data = await rootBundle.load('assets/dot.png');
+    final Completer<ui.Image> completer = new Completer();
+    ui.decodeImageFromList(Uint8List.view(data.buffer), (ui.Image img) {
+      return completer.complete(img);
+    });
+    return completer.future;
+  }
+
+  Widget _canvas() {
+    return LayoutBuilder(
+      builder: (context, size) {
+        return Container(
+          color: Colors.black,
+          child: SafeArea(
+            child: Column(
+              children: [
+                CustomPaint(
+                  painter: ekgPainter,
+                  size: Size.square(size.maxWidth),
+                ),
+              ],
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.display1,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+          ),
+        );
+      },
     );
+  }
+}
+
+class EKGPainter extends CustomPainter {
+  ui.Image image;
+
+  double _offset = 1.0;
+  var _ekgMap = <Offset>[];
+
+  void _populateEkgMap() {
+    int k = 0;
+
+    _ekgMap.clear();
+
+    final shift = (45 - _offset * 45) / 180;
+
+    while (k < 10) {
+      _ekgMap.add(Offset(k / 180 - shift, 0.0));
+      k++;
+    }
+
+    while (k < 15) {
+      _ekgMap.add(Offset(k / 180 - shift, sin(1.0 * pi * (k - 10) / (5)) / 5));
+      k++;
+    }
+
+    while (k < 17) {
+      _ekgMap.add(Offset(k / 180 - shift, 0.0));
+      k++;
+    }
+
+    while (k < 21) {
+      _ekgMap
+          .add(Offset(k / 180 - shift, -sin(1.0 * pi * (k - 17) / (4)) / 10.0));
+      k++;
+    }
+
+    while (k < 26) {
+      _ekgMap.add(Offset(k / 180 - shift, sin(1.0 * pi * (k - 21) / (5))));
+      k++;
+    }
+
+    while (k < 31) {
+      _ekgMap
+          .add(Offset(k / 180 - shift, -sin(1.0 * pi * (k - 26) / (5)) / 2.0));
+      k++;
+    }
+
+    while (k < 35) {
+      _ekgMap.add(Offset(k / 180 - shift, 0.0));
+      k++;
+    }
+
+    while (k < 46) {
+      _ekgMap
+          .add(Offset(k / 180 - shift, sin(1.0 * pi * (k - 35) / (11)) / 8.0));
+      k++;
+    }
+
+    while (k < 180 - _offset * 45) {
+      _ekgMap.add(Offset(k / 180 - shift, _ekgMap[k % 45].dy));
+      k++;
+    }
+
+    _ekgMap.removeRange(0, 45 - (_offset * 45).floor());
+
+    _ekgMap = _ekgMap
+        .map((offset) => Offset(offset.dx, 0.5 - offset.dy / 3))
+        .toList();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+
+    _populateEkgMap();
+
+    var path = Path();
+    path.addPolygon(_ekgMap, false);
+    path = path.transform(Matrix4.identity().scaled(size.width).storage);
+
+    paint.color = Colors.green;
+    paint.style = PaintingStyle.stroke;
+    paint.strokeWidth = 3;
+    paint.strokeJoin = StrokeJoin.round;
+    canvas.drawPath(path, paint);
+
+    if (image != null) {
+      paint.color = Colors.white;
+      final imageOffset =
+          _ekgMap.last * size.width - Offset(image.width / 2, image.height / 2);
+      paint.colorFilter = ColorFilter.matrix(<double>[
+        // 4x5  matrix
+        0.2, // row 1
+        0.0,
+        0.0,
+        0.0,
+        0.0, // row 2
+        0.6,
+        0.0,
+        0.0,
+        0.0, // row 3
+        0.0,
+        0.3,
+        0.0,
+        0.0, // row 4
+        0.0,
+        0.0,
+        0.0,
+        0.0, // row 5
+        0.0,
+        0.8,
+        0.0,
+      ]);
+      canvas.drawImage(image, imageOffset, paint);
+      paint.strokeWidth = 10;
+      paint.strokeCap = StrokeCap.round;
+      canvas.drawPoints(
+          ui.PointMode.points, [_ekgMap.last * size.width], paint);
+    }
+
+    _drawGrid(canvas, paint, size);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) {
+    return false;
+  }
+
+  void _drawGrid(Canvas canvas, Paint paint, Size size) {
+    paint.color = Colors.white38;
+    paint.style = PaintingStyle.stroke;
+    paint.strokeWidth = 1;
+    paint.strokeJoin = StrokeJoin.bevel;
+    for (double xy = 0; xy < 1; xy += 0.05) {
+      canvas.drawLine(Offset(xy * size.width, 0),
+          Offset(xy * size.width, size.height), paint);
+      canvas.drawLine(Offset(0, xy * size.width),
+          Offset(size.width, xy * size.height), paint);
+    }
   }
 }
