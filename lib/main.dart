@@ -35,8 +35,8 @@ class _EKGScreenState extends State<EKGScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _animationController =
-        AnimationController(duration: Duration(milliseconds: 1200), vsync: this);
+    _animationController = AnimationController(
+        duration: Duration(milliseconds: 1200), vsync: this);
     _animation = Tween<double>(begin: 1, end: 0).animate(_animationController);
     _animationController.repeat();
   }
@@ -166,42 +166,30 @@ class EKGPainter extends CustomPainter {
 
     _populateEkgMap();
 
+    canvas.transform(Matrix4.identity().scaled(size.width).storage);
+
     var path = Path();
     path.addPolygon(_ekgMap, false);
-    path = path.transform(Matrix4.identity().scaled(size.width).storage);
 
     paint.color = Colors.green;
     paint.style = PaintingStyle.stroke;
-    paint.strokeWidth = 3;
+    paint.strokeWidth = 3 / size.width;
     paint.strokeJoin = StrokeJoin.round;
     canvas.drawPath(path, paint);
+
+    canvas.transform(Matrix4.identity().scaled(1 / size.width).storage);
 
     if (image != null) {
       paint.color = Colors.white;
       final imageOffset =
           _ekgMap.last * size.width - Offset(image.width / 2, image.height / 2);
-      paint.colorFilter = ColorFilter.matrix(<double>[
-        // 4x5  matrix
-        0.2, // row 1
-        0.0,
-        0.0,
-        0.0,
-        0.0, // row 2
-        0.6,
-        0.0,
-        0.0,
-        0.0, // row 3
-        0.0,
-        0.3,
-        0.0,
-        0.0, // row 4
-        0.0,
-        0.0,
-        0.0,
-        0.0, // row 5
-        0.0,
-        0.8,
-        0.0,
+      paint.colorFilter = ColorFilter.matrix([
+        // 4x5 matrix
+        0.2, 0.0, 0.0, 0.0,
+        0.0, 0.6, 0.0, 0.0,
+        0.0, 0.0, 0.3, 0.0,
+        0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
       ]);
       canvas.drawImage(image, imageOffset, paint);
       paint.strokeWidth = 10;
